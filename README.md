@@ -189,6 +189,8 @@ Die Hilfe funktioniert vollständig offline und ist optisch in das 3MF-Explorer-
 
 Wenn eine neuere Version verfügbar ist, wird dies in der Statusleiste angezeigt. Das Update kann anschließend direkt aus 3MF-Explorer heruntergeladen und installiert werden.
 
+Für die integrierte Updatefunktion muss der GitHub-Release das Asset `3MF-Explorer.zip` enthalten. Die veröffentlichten Programmdateien müssen direkt im Stammverzeichnis dieser ZIP liegen.
+
 Nach erfolgreicher Aktualisierung wird 3MF-Explorer mit der neuen Version gestartet.
 
 Persönliche Einstellungen und Favoriten werden unabhängig von den Programmdateien gespeichert und bleiben bei einem normalen Update erhalten.

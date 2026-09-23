@@ -64,14 +64,16 @@ namespace ThreeMFExplorer
         {
             GitHubAsset? asset =
                 release.Assets.FirstOrDefault(a =>
-                    a.Name.EndsWith(
-                        ".zip",
+                    string.Equals(
+                        a.Name,
+                        GitHubInfo.ReleaseAssetName,
                         StringComparison.OrdinalIgnoreCase));
 
             if (asset is null)
             {
                 throw new InvalidOperationException(
-                    "Keine ZIP-Datei im GitHub-Release gefunden.");
+                    $"Das GitHub-Release enthält nicht die erwartete Datei " +
+                    $"'{GitHubInfo.ReleaseAssetName}'.");
             }
 
             string tempZip =
@@ -164,13 +166,22 @@ Remove-Item -LiteralPath $PSCommandPath `
 
         public string TagName { get; set; } = "";
 
+        [System.Text.Json.Serialization.JsonPropertyName(
+            "name")]
+
         public string Name { get; set; } = "";
+
+        [System.Text.Json.Serialization.JsonPropertyName(
+            "assets")]
 
         public System.Collections.Generic.List<GitHubAsset> Assets { get; set; } = new();
     }
 
     public sealed class GitHubAsset
     {
+        [System.Text.Json.Serialization.JsonPropertyName(
+            "name")]
+
         public string Name { get; set; } = "";
 
         [System.Text.Json.Serialization.JsonPropertyName(

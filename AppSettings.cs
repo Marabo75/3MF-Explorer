@@ -12,20 +12,9 @@ namespace ThreeMFExplorer
                     Environment.SpecialFolder.LocalApplicationData),
                 "3MF-Explorer");
 
-        private static readonly string LegacySettingsDirectory =
-            Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder.LocalApplicationData),
-                "3MF-Explorer");
-
         private static readonly string SettingsFile =
             Path.Combine(
                 SettingsDirectory,
-                "settings.ini");
-
-        private static readonly string LegacySettingsFile =
-            Path.Combine(
-                LegacySettingsDirectory,
                 "settings.ini");
 
         private const string LastFolderKey = "LastFolder";
@@ -106,9 +95,7 @@ namespace ThreeMFExplorer
             try
             {
                 string sourceFile =
-                    File.Exists(SettingsFile)
-                        ? SettingsFile
-                        : LegacySettingsFile;
+                    SettingsFile;
 
                 if (!File.Exists(sourceFile))
                     return defaultValue;
@@ -208,9 +195,7 @@ namespace ThreeMFExplorer
             try
             {
                 string sourceFile =
-                    File.Exists(SettingsFile)
-                        ? SettingsFile
-                        : LegacySettingsFile;
+                    SettingsFile;
 
                 if (!File.Exists(sourceFile))
                     return settings;

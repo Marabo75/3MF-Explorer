@@ -4,6 +4,7 @@ namespace ThreeMFExplorer
     {
         public const string Owner = "Marabo75";
         public const string Repository = "3MF-Explorer";
+        public const string ReleaseAssetName = "3MF-Explorer.zip";
 
         public const string RepositoryUrl =
             "https://github.com/Marabo75/3MF-Explorer";

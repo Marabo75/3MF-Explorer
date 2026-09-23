@@ -163,20 +163,12 @@ namespace ThreeMFExplorer
                 "3MF-Explorer",
                 "printer-profile.txt");
 
-        private static readonly string LegacySelectionFile =
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "3MF-Explorer",
-                "printer-profile.txt");
-
         public static PrinterProfile LoadSelected()
         {
             try
             {
                 string sourceFile =
-                    File.Exists(SelectionFile)
-                        ? SelectionFile
-                        : LegacySelectionFile;
+                    SelectionFile;
 
                 if (File.Exists(sourceFile))
                 {

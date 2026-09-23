@@ -36,9 +36,6 @@ namespace ThreeMFExplorer
         private static readonly string FavoritesFilePath =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "3MF-Explorer", "favorites.txt");
 
-        private static readonly string LegacyFavoritesFilePath =
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "3MF-Explorer", "favorites.txt");
-
         private string _thumbnailView = "Medium";
         private bool _thumbnailViewInitialized;
 
@@ -443,9 +440,7 @@ namespace ThreeMFExplorer
             try
             {
                 string sourceFile =
-                    File.Exists(FavoritesFilePath)
-                        ? FavoritesFilePath
-                        : LegacyFavoritesFilePath;
+                    FavoritesFilePath;
 
                 if (!File.Exists(sourceFile))
                     return;
