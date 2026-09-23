@@ -746,8 +746,26 @@ namespace ThreeMFExplorer
 
                 try
                 {
-                    using Stream imageStream =
-                        imageEntry.Open();
+                    // Detach the image completely from the ZipArchiveEntry.
+                    // WPF can continue bitmap decoding on a background thread.
+                    // A stream backed by the ZIP/DeflateStream must therefore
+                    // never remain as BitmapImage.StreamSource.
+                    byte[] imageBytes;
+
+                    using (Stream zipStream = imageEntry.Open())
+                    using (MemoryStream copy = new MemoryStream())
+                    {
+                        zipStream.CopyTo(copy);
+                        imageBytes = copy.ToArray();
+                    }
+
+                    if (imageBytes.Length == 0)
+                        continue;
+
+                    using MemoryStream imageStream =
+                        new MemoryStream(
+                            imageBytes,
+                            writable: false);
 
                     BitmapImage bitmap =
                         new BitmapImage();
