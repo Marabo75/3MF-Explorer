@@ -218,6 +218,6 @@ Persönliche Einstellungen und Favoriten werden unabhängig von den Programmdate
 
 ## Version
 
-**3MF-Explorer 1.12.0**
+**3MF-Explorer 1.12.1**
 
 Die Änderungen der einzelnen Versionen befinden sich in `CHANGELOG.md`.

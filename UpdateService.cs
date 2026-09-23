@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -12,12 +14,17 @@ namespace ThreeMFExplorer
 {
     public sealed class UpdateService
     {
-        private static readonly HttpClient Client = new();
+        private static readonly HttpClient Client =
+            CreateHttpClient();
 
-        public UpdateService()
+        private static HttpClient CreateHttpClient()
         {
-            Client.DefaultRequestHeaders.UserAgent.ParseAdd(
+            HttpClient client = new();
+
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
                 "3MF-Explorer-Updater");
+
+            return client;
         }
 
         public async Task<GitHubRelease?> GetLatestReleaseAsync()
@@ -26,7 +33,9 @@ namespace ThreeMFExplorer
                 $"https://api.github.com/repos/{GitHubInfo.Owner}/{GitHubInfo.Repository}/releases/latest";
 
             using HttpResponseMessage response =
-                await Client.GetAsync(url);
+                await Client.GetAsync(
+                    url,
+                    HttpCompletionOption.ResponseHeadersRead);
 
             response.EnsureSuccessStatusCode();
 
@@ -47,8 +56,12 @@ namespace ThreeMFExplorer
             string latest =
                 latestVersion.TrimStart('v', 'V');
 
-            if (Version.TryParse(current, out Version? currentParsed) &&
-                Version.TryParse(latest, out Version? latestParsed))
+            if (Version.TryParse(
+                    current,
+                    out Version? currentParsed) &&
+                Version.TryParse(
+                    latest,
+                    out Version? latestParsed))
             {
                 return latestParsed > currentParsed;
             }
@@ -63,17 +76,25 @@ namespace ThreeMFExplorer
             GitHubRelease release)
         {
             GitHubAsset? asset =
-                release.Assets.FirstOrDefault(a =>
-                    string.Equals(
-                        a.Name,
-                        GitHubInfo.ReleaseAssetName,
-                        StringComparison.OrdinalIgnoreCase));
+                release.Assets.FirstOrDefault(
+                    item =>
+                        string.Equals(
+                            item.Name,
+                            GitHubInfo.ReleaseAssetName,
+                            StringComparison.OrdinalIgnoreCase));
 
             if (asset is null)
             {
                 throw new InvalidOperationException(
                     $"Das GitHub-Release enthält nicht die erwartete Datei " +
                     $"'{GitHubInfo.ReleaseAssetName}'.");
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    asset.BrowserDownloadUrl))
+            {
+                throw new InvalidOperationException(
+                    "Die Download-Adresse des Update-Assets ist leer.");
             }
 
             string tempZip =
@@ -86,107 +107,255 @@ namespace ThreeMFExplorer
                     Path.GetTempPath(),
                     $"3MF-Explorer-{Guid.NewGuid():N}");
 
-            string applicationDirectory =
-                AppContext.BaseDirectory.TrimEnd(
-                    Path.DirectorySeparatorChar);
-
-            string executablePath =
-                Environment.ProcessPath ??
-                Path.Combine(
-                    applicationDirectory,
-                    "3MF-Explorer.exe");
-
-            await using (Stream source =
-                await Client.GetStreamAsync(
-                    asset.BrowserDownloadUrl))
-
-            await using (FileStream target =
-                File.Create(tempZip))
-            {
-                await source.CopyToAsync(target);
-            }
-
-            Directory.CreateDirectory(tempExtract);
-
-            ZipFile.ExtractToDirectory(
-                tempZip,
-                tempExtract);
-
             string scriptPath =
                 Path.Combine(
                     Path.GetTempPath(),
                     $"3MF-Explorer-update-{Guid.NewGuid():N}.ps1");
 
-            string script = $"""
-param()
+            bool updaterStarted = false;
 
-Start-Sleep -Seconds 2
+            try
+            {
+                string applicationDirectory =
+                    AppContext.BaseDirectory.TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar);
 
-Copy-Item -Path '{tempExtract.Replace("'", "''")}\\*' `
-    -Destination '{applicationDirectory.Replace("'", "''")}' `
-    -Recurse -Force
+                string executablePath =
+                    Environment.ProcessPath ??
+                    Path.Combine(
+                        applicationDirectory,
+                        "3MF-Explorer.exe");
 
-Start-Process -FilePath '{executablePath.Replace("'", "''")}'
+                int currentProcessId =
+                    Environment.ProcessId;
 
-Remove-Item -LiteralPath '{tempZip.Replace("'", "''")}' `
-    -Force -ErrorAction SilentlyContinue
+                using HttpResponseMessage downloadResponse =
+                    await Client.GetAsync(
+                        asset.BrowserDownloadUrl,
+                        HttpCompletionOption.ResponseHeadersRead);
 
-Remove-Item -LiteralPath '{tempExtract.Replace("'", "''")}' `
-    -Recurse -Force -ErrorAction SilentlyContinue
+                downloadResponse.EnsureSuccessStatusCode();
 
-Remove-Item -LiteralPath $PSCommandPath `
-    -Force -ErrorAction SilentlyContinue
-""";
+                await using (Stream source =
+                    await downloadResponse.Content.ReadAsStreamAsync())
 
-            await File.WriteAllTextAsync(
-                scriptPath,
-                script);
-
-            Process.Start(
-                new ProcessStartInfo
+                await using (FileStream target =
+                    new FileStream(
+                        tempZip,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None,
+                        81920,
+                        FileOptions.Asynchronous |
+                        FileOptions.SequentialScan))
                 {
-                    FileName = "powershell.exe",
+                    await source.CopyToAsync(target);
+                }
 
-                    Arguments =
-                        $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                ValidateUpdateArchive(
+                    tempZip);
 
-                    UseShellExecute = false,
+                Directory.CreateDirectory(
+                    tempExtract);
 
-                    CreateNoWindow = true
-                });
+                ZipFile.ExtractToDirectory(
+                    tempZip,
+                    tempExtract);
 
-            Application.Current.Shutdown();
+                string extractedExecutable =
+                    Path.Combine(
+                        tempExtract,
+                        "3MF-Explorer.exe");
+
+                if (!File.Exists(
+                        extractedExecutable))
+                {
+                    throw new InvalidDataException(
+                        "Die Update-ZIP enthält keine '3MF-Explorer.exe' " +
+                        "im Stammverzeichnis.");
+                }
+
+                string script =
+                    "param(\r\n" +
+                    "    [Parameter(Mandatory = $true)]\r\n" +
+                    "    [int]$ProcessId\r\n" +
+                    ")\r\n" +
+                    "\r\n" +
+                    "$ErrorActionPreference = 'Stop'\r\n" +
+                    "\r\n" +
+                    "try\r\n" +
+                    "{\r\n" +
+                    "    Wait-Process -Id $ProcessId -ErrorAction SilentlyContinue\r\n" +
+                    "    Start-Sleep -Milliseconds 500\r\n" +
+                    "\r\n" +
+                    "    Copy-Item -Path '" +
+                    EscapePowerShellLiteral(tempExtract) +
+                    "\\*' -Destination '" +
+                    EscapePowerShellLiteral(applicationDirectory) +
+                    "' -Recurse -Force\r\n" +
+                    "\r\n" +
+                    "    Start-Process -FilePath '" +
+                    EscapePowerShellLiteral(executablePath) +
+                    "'\r\n" +
+                    "}\r\n" +
+                    "finally\r\n" +
+                    "{\r\n" +
+                    "    Remove-Item -LiteralPath '" +
+                    EscapePowerShellLiteral(tempZip) +
+                    "' -Force -ErrorAction SilentlyContinue\r\n" +
+                    "\r\n" +
+                    "    Remove-Item -LiteralPath '" +
+                    EscapePowerShellLiteral(tempExtract) +
+                    "' -Recurse -Force -ErrorAction SilentlyContinue\r\n" +
+                    "\r\n" +
+                    "    Remove-Item -LiteralPath $PSCommandPath " +
+                    "-Force -ErrorAction SilentlyContinue\r\n" +
+                    "}\r\n";
+
+                await File.WriteAllTextAsync(
+                    scriptPath,
+                    script);
+
+                Process? updaterProcess =
+                    Process.Start(
+                        new ProcessStartInfo
+                        {
+                            FileName =
+                                "powershell.exe",
+
+                            Arguments =
+                                $"-NoProfile -ExecutionPolicy Bypass " +
+                                $"-File \"{scriptPath}\" " +
+                                $"-ProcessId {currentProcessId}",
+
+                            UseShellExecute =
+                                false,
+
+                            CreateNoWindow =
+                                true
+                        });
+
+                if (updaterProcess is null)
+                {
+                    throw new InvalidOperationException(
+                        "Der Update-Prozess konnte nicht gestartet werden.");
+                }
+
+                updaterStarted = true;
+
+                Application.Current.Shutdown();
+            }
+            catch
+            {
+                if (!updaterStarted)
+                {
+                    TryDeleteFile(
+                        tempZip);
+
+                    TryDeleteDirectory(
+                        tempExtract);
+
+                    TryDeleteFile(
+                        scriptPath);
+                }
+
+                throw;
+            }
+        }
+
+        private static void ValidateUpdateArchive(
+            string zipPath)
+        {
+            using ZipArchive archive =
+                ZipFile.OpenRead(
+                    zipPath);
+
+            ZipArchiveEntry? executableEntry =
+                archive.Entries.FirstOrDefault(
+                    entry =>
+                        string.Equals(
+                            entry.FullName.Replace('\\', '/'),
+                            "3MF-Explorer.exe",
+                            StringComparison.OrdinalIgnoreCase));
+
+            if (executableEntry is null)
+            {
+                throw new InvalidDataException(
+                    "Die Update-ZIP ist ungültig. " +
+                    "'3MF-Explorer.exe' muss direkt im Stammverzeichnis liegen.");
+            }
+        }
+
+        private static string EscapePowerShellLiteral(
+            string value)
+        {
+            return value.Replace(
+                "'",
+                "''");
+        }
+
+        private static void TryDeleteFile(
+            string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            catch
+            {
+                // Cleanup must never hide the actual update error.
+            }
+        }
+
+        private static void TryDeleteDirectory(
+            string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(
+                        path,
+                        recursive: true);
+                }
+            }
+            catch
+            {
+                // Cleanup must never hide the actual update error.
+            }
         }
     }
 
     public sealed class GitHubRelease
     {
-        [System.Text.Json.Serialization.JsonPropertyName(
+        [JsonPropertyName(
             "tag_name")]
+        public string TagName { get; set; } =
+            string.Empty;
 
-        public string TagName { get; set; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName(
+        [JsonPropertyName(
             "name")]
+        public string Name { get; set; } =
+            string.Empty;
 
-        public string Name { get; set; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName(
+        [JsonPropertyName(
             "assets")]
-
-        public System.Collections.Generic.List<GitHubAsset> Assets { get; set; } = new();
+        public List<GitHubAsset> Assets { get; set; } =
+            new();
     }
 
     public sealed class GitHubAsset
     {
-        [System.Text.Json.Serialization.JsonPropertyName(
+        [JsonPropertyName(
             "name")]
+        public string Name { get; set; } =
+            string.Empty;
 
-        public string Name { get; set; } = "";
-
-        [System.Text.Json.Serialization.JsonPropertyName(
+        [JsonPropertyName(
             "browser_download_url")]
-
-        public string BrowserDownloadUrl { get; set; } = "";
+        public string BrowserDownloadUrl { get; set; } =
+            string.Empty;
     }
 }

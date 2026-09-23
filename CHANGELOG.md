@@ -1,5 +1,18 @@
 # 3MF-Explorer – Changelog
 
+## 1.12.1
+
+- Absturz beim Laden von Druckplatten-Vorschaubildern aus 3MF-Dateien behoben
+- ZIP-Bilddaten werden vor der WPF-Dekodierung vollständig vom komprimierten 3MF-Stream entkoppelt
+- Updatefunktion erwartet jetzt eindeutig das Release-Asset `3MF-Explorer.zip`
+- GitHub-Release-JSON für Release-Name und Asset-Liste vollständig zugeordnet
+- Update-ZIP wird vor der Installation geprüft; `3MF-Explorer.exe` muss direkt im ZIP-Stamm liegen
+- Updater wartet jetzt auf das vollständige Beenden der laufenden Anwendung, bevor Programmdateien ersetzt werden
+- Temporäre Update-Dateien werden bei Fehlern zuverlässig aufgeräumt
+- Versionsanzeige wird direkt aus der Assembly-Version ermittelt; doppelte Versionspflege in `VersionInfo.cs` entfällt
+- Release-Erstellung mit `Build-Release.ps1` automatisiert
+- Interne Programmbezeichnungen weiter auf `3MF-Explorer` und `ThreeMFExplorer` vereinheitlicht
+
 ## 1.12.0
 
 - Unterstützung für Bambu-Studio-3MF-Projekte mit mehreren Druckplatten erweitert
